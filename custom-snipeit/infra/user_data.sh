@@ -3,7 +3,7 @@ set -e
 
 # Update system
 apt-get update -y
-apt-get install -y ca-certificates curl gnupg awscli snapd
+apt-get install -y ca-certificates curl gnupg awscli snapd git
 
 ##############################################
 # Install SSM Agent (Required for CI/CD)
@@ -45,3 +45,4 @@ chmod +x /usr/local/bin/docker-compose
 ##############################################
 mkdir -p /opt/snipeit
 chown -R ubuntu:ubuntu /opt/snipeit
+

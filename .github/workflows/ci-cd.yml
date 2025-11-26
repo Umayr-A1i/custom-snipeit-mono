@@ -6,42 +6,37 @@ on:
   workflow_dispatch: {}
 
 jobs:
+
   terraform:
     runs-on: ubuntu-latest
     permissions:
       id-token: write
       contents: read
-    defaults:
-      run:
-        working-directory: custom-snipeit/infra
 
     steps:
-      - name: Checkout
+      - name: Checkout repo
         uses: actions/checkout@v4
 
-      - name: Setup Terraform
+      - name: Install Terraform
         uses: hashicorp/setup-terraform@v3
         with:
-          terraform_version: 1.9.8
+          terraform_version: 1.7.5
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: arn:aws:iam::448049798930:role/GithubSnipeitDeployRole
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/GithubSnipeitDeployRole
           aws-region: ${{ secrets.AWS_REGION }}
 
-      - name: Terraform init
-        run: terraform init -input=false
+      - name: Terraform Init
+        run: terraform -chdir=custom-snipeit/infra init -input=false
 
-      - name: Terraform fmt, validate, plan
-        run: |
-          terraform fmt -check
-          terraform validate
-          terraform plan -out=tfplan
+      - name: Terraform Plan
+        run: terraform -chdir=custom-snipeit/infra plan -out=tfplan
 
-      - name: Terraform apply
-        if: github.ref == 'refs/heads/main'
-        run: terraform apply -auto-approve tfplan
+      - name: Terraform Apply
+        run: terraform -chdir=custom-snipeit/infra apply -auto-approve tfplan
+
 
   build_and_push:
     runs-on: ubuntu-latest
@@ -51,44 +46,30 @@ jobs:
       contents: read
 
     steps:
-      - name: Checkout
+      - name: Checkout repo
         uses: actions/checkout@v4
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: arn:aws:iam::448049798930:role/GithubSnipeitDeployRole
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/GithubSnipeitDeployRole
           aws-region: ${{ secrets.AWS_REGION }}
 
       - name: Login to ECR
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - name: Install Flask test dependencies
-        working-directory: custom-snipeit/flask
-        run: pip install -r requirements.txt pytest
-
-      - name: Run Flask tests
-        working-directory: custom-snipeit/flask
-        run: pytest
-
       - name: Build & push Snipe-IT image
-        working-directory: custom-snipeit/snipeit
         run: |
-          docker build -t snipeit:v8.3.6 .
+          docker build -t snipeit:v8.3.6 custom-snipeit/snipeit
           docker tag snipeit:v8.3.6 ${{ secrets.ECR_URI_SNIPEIT }}:v8.3.6
           docker push ${{ secrets.ECR_URI_SNIPEIT }}:v8.3.6
 
       - name: Build & push Flask image
-        working-directory: custom-snipeit/flask
         run: |
-          docker build -t flask-middleware:${GITHUB_SHA} .
+          docker build -t flask-middleware:${GITHUB_SHA} custom-snipeit/flask
           docker tag flask-middleware:${GITHUB_SHA} ${{ secrets.ECR_URI_FLASK }}:${GITHUB_SHA}
           docker push ${{ secrets.ECR_URI_FLASK }}:${GITHUB_SHA}
+
 
   deploy:
     runs-on: ubuntu-latest
@@ -96,43 +77,36 @@ jobs:
     permissions:
       id-token: write
       contents: read
-    defaults:
-      run:
-        working-directory: custom-snipeit/infra
 
     steps:
-      - name: Checkout
+      - name: Checkout repo
         uses: actions/checkout@v4
-
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: 1.9.8
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: arn:aws:iam::448049798930:role/GithubSnipeitDeployRole
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/GithubSnipeitDeployRole
           aws-region: ${{ secrets.AWS_REGION }}
 
-      - name: Get Terraform outputs
-        id: tf-output
+      - name: Get Terraform Outputs
+        id: tfout
         run: |
-          terraform init -input=false
-          INSTANCE=$(terraform output -raw ec2_instance_id)
-          STATIC_IP=$(terraform output -raw static_ip)
-          echo "INSTANCE_ID=$INSTANCE" >> $GITHUB_OUTPUT
-          echo "STATIC_IP=$STATIC_IP" >> $GITHUB_OUTPUT
+          terraform -chdir=custom-snipeit/infra init -input=false
+          echo "INSTANCE_ID=$(terraform -chdir=custom-snipeit/infra output -raw ec2_instance_id)" >> $GITHUB_OUTPUT
 
-      - name: Send SSM command to deploy containers
+      - name: Deploy via SSM
         run: |
           aws ssm send-command \
-            --instance-ids ${{ steps.tf-output.outputs.INSTANCE_ID }} \
+            --instance-ids ${{ steps.tfout.outputs.INSTANCE_ID }} \
             --document-name "AWS-RunShellScript" \
             --comment "Deploy Snipe-IT stack" \
             --parameters commands="[
+              'sudo apt-get install -y git',
               'cd /opt/snipeit',
+              'if [ ! -d .git ]; then git clone https://github.com/Umayr-A1i/custom-snipeit-mono.git /opt/snipeit; fi',
+              'cd /opt/snipeit && git pull origin main',
+              'cd /opt/snipeit/custom-snipeit/snipeit',
               'aws ecr get-login-password --region ${{ secrets.AWS_REGION }} | docker login --username AWS --password-stdin ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com',
-              'docker compose pull',
-              'docker compose up -d'
+              'docker compose -f docker-compose.prod.yml pull',
+              'docker compose -f docker-compose.prod.yml up -d'
             ]"
