@@ -23,7 +23,7 @@ services:
       - "80:80"
 
   flask:
-    image: 448049798930.dkr.ecr.eu-west-2.amazonaws.com/flask-middleware:50ad7ffed8830bccb067022462f70f5a4d1d53c9
+    image: 448049798930.dkr.ecr.eu-west-2.amazonaws.com/flask-middleware:v8.3.6
     container_name: snipeit-flask
     restart: unless-stopped
     env_file:
