@@ -151,6 +151,10 @@ resource "aws_ecr_repository" "flask_middleware" {
 
 resource "aws_eip" "snipeit_eip" {
   domain = "vpc"
+  
+  lifecycle {
+    prevent_destroy = true
+  }
 
   tags = {
     Name = "snipeit-static-ip"
@@ -191,6 +195,6 @@ resource "aws_instance" "snipeit_ec2" {
 ########################################
 
 resource "aws_eip_association" "snipeit_association" {
-  allocation_id = aws_eip.snipeit_eip.id
+  allocation_id = aws_eip.snipeit_eip.allocation_id
   instance_id   = aws_instance.snipeit_ec2.id
 }
