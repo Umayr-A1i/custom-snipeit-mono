@@ -133,4 +133,3 @@ resource "aws_eip_association" "snipeit_eip_assoc" {
   instance_id   = aws_instance.snipeit_ec2.id
   allocation_id = aws_eip.snipeit_eip.id
 }
-
