@@ -171,6 +171,14 @@ resource "aws_instance" "snipeit_ec2" {
 
   user_data = file("${path.module}/user_data.sh")
 
+  ########################################
+  # ROOT VOLUME — 20 GiB
+  ########################################
+  root_block_device {
+    volume_size = 20
+    volume_type = "gp3"
+  }
+
   tags = {
     Name        = "snipeit-host"
     Environment = "prod"

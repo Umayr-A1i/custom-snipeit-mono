@@ -33,11 +33,16 @@ infra/terraform.tfvars
 # VS Code
 .vscode/
 
-# Environment files (real secrets)
-*.env
-*.env.*
-!*.env.snipeit.example
-!*.env.flask.example
+# Ignore generic env files
+.env
+
+# DO NOT ignore the deployment env files
+!.env.snipeit
+!.env.flask
+
+# Allow examples (these are already fine)
+!.env.snipeit.example
+!.env.flask.example
 
 # OS
 .DS_Store
