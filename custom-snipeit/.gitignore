@@ -40,6 +40,7 @@ override.tf
 override.tf.json
 *_override.tf
 *_override.tf.json
+umayr-dev-key-v1
 
 # Terraform local vars
 infra/terraform.tfvars

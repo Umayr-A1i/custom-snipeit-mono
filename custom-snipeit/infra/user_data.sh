@@ -1,22 +1,22 @@
 #!/bin/bash
 set -e
 
-# I update the base OS packages first.
+##############################################
+# UPDATE BASE SYSTEM
+##############################################
 apt-get update -y
 apt-get install -y ca-certificates curl gnupg awscli snapd git
 
 ##############################################
-# Install SSM Agent (so I can use SSM/CI/CD)
+# INSTALL SSM AGENT
 ##############################################
-# I install the SSM agent via snap because it's the recommended path on Ubuntu.
 snap install amazon-ssm-agent --classic
 systemctl enable snap.amazon-ssm-agent.amazon-ssm-agent.service
 systemctl start snap.amazon-ssm-agent.amazon-ssm-agent.service
 
 ##############################################
-# Install Docker (engine + CLI + plugins)
+# INSTALL DOCKER
 ##############################################
-# I set up Docker’s official APT repository.
 install -m 0755 -d /etc/apt/keyrings
 curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
 
@@ -28,32 +28,30 @@ echo \
 apt-get update -y
 apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
 
-# I enable Docker on boot and start it now.
 systemctl enable docker
 systemctl start docker
 
-# I let the ubuntu user run docker without sudo.
-usermod -aG docker ubuntu
+# Allow ubuntu user to use docker (for debugging if needed)
+usermod -aG docker ubuntu || true
 
 ##############################################
-# (Optional) Docker Compose v2 standalone
+# DIRECTORIES FOR ENV FILES
 ##############################################
-# I also install the docker-compose v2 binary so I can run `docker-compose`
-# as well as `docker compose` if I want to.
-curl -SL "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" \
-  -o /usr/local/bin/docker-compose
-chmod +x /usr/local/bin/docker-compose
-
-##############################################
-# Prepare app directory and clone repo
-##############################################
-# I create a base directory for the Snipe-IT stack.
 mkdir -p /opt/snipeit
-chown -R ubuntu:ubuntu /opt/snipeit
+mkdir -p /opt/flask
+chown -R ubuntu:ubuntu /opt/snipeit /opt/flask || true
 
-# I clone my monorepo so the CI/CD job has something to work with.
-if [ ! -d "/opt/snipeit/custom-snipeit-mono" ]; then
-  git clone https://github.com/Umayr-A1i/custom-snipeit-mono.git /opt/snipeit/custom-snipeit-mono
-  chown -R ubuntu:ubuntu /opt/snipeit/custom-snipeit-mono
-fi
+##############################################
+# LOGIN TO ECR
+##############################################
+aws ecr get-login-password --region eu-west-2 | docker login \
+  --username AWS \
+  --password-stdin 448049798930.dkr.ecr.eu-west-2.amazonaws.com
 
+##############################################
+# PULL V1 IMAGES (LATEST TAG)
+##############################################
+docker pull 448049798930.dkr.ecr.eu-west-2.amazonaws.com/snipeit-v1:latest || true
+docker pull 448049798930.dkr.ecr.eu-west-2.amazonaws.com/flask-middleware-v1:latest || true
+
+# Containers are started later by CI/CD via SSM once .env files exist.
