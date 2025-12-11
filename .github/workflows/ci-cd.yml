@@ -9,7 +9,7 @@ on:
 
 jobs:
   ##############################################
-  # JOB 1 — TERRAFORM (Init → Validate → Apply)
+  # JOB 1 — TERRAFORM (Init → Validate → Plan)
   ##############################################
   terraform:
     runs-on: ubuntu-latest
@@ -60,6 +60,8 @@ jobs:
       id-token: write
       contents: read
 
+    if: github.ref == 'refs/heads/main'
+
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
@@ -73,9 +75,6 @@ jobs:
       - name: Login to ECR
         uses: aws-actions/amazon-ecr-login@v2
 
-      ##############################################
-      # BUILD SNIPE-IT V1 CONTAINER
-      ##############################################
       - name: Build & Push Snipe-IT V1 Image
         working-directory: custom-snipeit/snipeit
         run: |
@@ -83,9 +82,6 @@ jobs:
           docker tag snipeit-v1:latest ${{ secrets.ECR_URI_SNIPEIT_V1 }}:latest
           docker push ${{ secrets.ECR_URI_SNIPEIT_V1 }}:latest
 
-      ##############################################
-      # BUILD FLASK MIDDLEWARE V1 CONTAINER
-      ##############################################
       - name: Build & Push Flask Middleware V1 Image
         working-directory: custom-snipeit/flask
         run: |
@@ -97,6 +93,7 @@ jobs:
   # JOB 3 — DEPLOY VIA AWS SSM
   ##############################################
   deploy:
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     needs: build_and_push
     permissions:
@@ -132,7 +129,8 @@ jobs:
             --document-name "AWS-RunShellScript" \
             --comment "Deploy Snipe-IT V1 Stack" \
             --parameters commands="[
-              'cd /opt/snipeit',
+              'mkdir -p /opt/snipeit /opt/flask',
+              'chown -R ssm-user:ssm-user /opt/snipeit /opt/flask',
               'docker pull ${{ secrets.ECR_URI_SNIPEIT_V1 }}:latest',
               'docker pull ${{ secrets.ECR_URI_FLASK_V1 }}:latest',
               'docker stop snipeit-v1 || true',
