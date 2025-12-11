@@ -47,7 +47,7 @@ jobs:
         run: terraform -chdir=custom-snipeit/infra plan -out=tfplan
 
       - name: Terraform Apply
-        if: github.ref == 'refs/heads/main'
+        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/feature/v1-backport'
         run: terraform -chdir=custom-snipeit/infra apply -auto-approve tfplan
 
   ##############################################
